@@ -114,27 +114,36 @@ class AssetLibrary {
 
         container.innerHTML = "";
 
+        // 现代风格的文件夹图标 SVG
+        const folderIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; vertical-align: middle;"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>`;
+        const listIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; vertical-align: middle;"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>`;
+
         // "全部" 子标签
         const allTab = document.createElement("div");
         allTab.className = "workflow-folder-tab" + (this.currentFolder === "" ? " active" : "");
-        allTab.textContent = `📋 全部`;
+        allTab.innerHTML = `${listIcon}全部`;
         allTab.style.cssText = `
-            padding: 6px 10px;
-            margin: 3px 0;
+            padding: 8px 12px;
+            margin: 2px 0;
             cursor: pointer;
-            border-radius: 4px;
+            border-radius: 6px;
             font-size: 13px;
             color: ${this.currentFolder === "" ? "#fff" : "#aaa"};
-            background: ${this.currentFolder === "" ? "#3b82f6" : "transparent"};
+            background: ${this.currentFolder === "" ? "linear-gradient(135deg, #3b82f6, #2563eb)" : "transparent"};
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
         `;
+        allTab.onmouseenter = () => { if (this.currentFolder !== "") allTab.style.background = "rgba(59, 130, 246, 0.2)"; };
+        allTab.onmouseleave = () => { if (this.currentFolder !== "") allTab.style.background = "transparent"; };
         allTab.onclick = () => {
             this.currentFolder = "";
             this.currentPage = 1;
             this.renderFolderTabs();
             this.renderAssets();
         };
-        allTab.ondragover = (e) => { e.preventDefault(); allTab.style.background = "#2563eb"; };
-        allTab.ondragleave = () => { allTab.style.background = this.currentFolder === "" ? "#3b82f6" : "transparent"; };
+        allTab.ondragover = (e) => { e.preventDefault(); allTab.style.background = "linear-gradient(135deg, #2563eb, #1d4ed8)"; };
+        allTab.ondragleave = () => { allTab.style.background = this.currentFolder === "" ? "linear-gradient(135deg, #3b82f6, #2563eb)" : "transparent"; };
         allTab.ondrop = (e) => this.handleDrop(e, "");
         container.appendChild(allTab);
 
@@ -142,60 +151,113 @@ class AssetLibrary {
         this.workflowFolders.forEach(folder => {
             const tab = document.createElement("div");
             tab.className = "workflow-folder-tab" + (this.currentFolder === folder.name ? " active" : "");
-            tab.innerHTML = `📁 ${folder.name} <span style="color:#888; font-size:11px;">(${folder.count})</span>`;
+            tab.innerHTML = `${folderIcon}${folder.name} <span style="color:#666; font-size:11px; margin-left:auto;">${folder.count}</span>`;
             tab.style.cssText = `
-                padding: 6px 10px;
-                margin: 3px 0;
+                padding: 8px 12px;
+                margin: 2px 0;
                 cursor: pointer;
-                border-radius: 4px;
+                border-radius: 6px;
                 font-size: 13px;
                 color: ${this.currentFolder === folder.name ? "#fff" : "#aaa"};
-                background: ${this.currentFolder === folder.name ? "#3b82f6" : "transparent"};
+                background: ${this.currentFolder === folder.name ? "linear-gradient(135deg, #3b82f6, #2563eb)" : "transparent"};
+                transition: all 0.2s ease;
                 display: flex;
-                justify-content: space-between;
                 align-items: center;
             `;
-            tab.onclick = (e) => {
-                if (e.target.classList.contains("delete-folder-btn")) return;
+            tab.onmouseenter = () => { if (this.currentFolder !== folder.name) tab.style.background = "rgba(59, 130, 246, 0.2)"; };
+            tab.onmouseleave = () => { if (this.currentFolder !== folder.name) tab.style.background = "transparent"; };
+            tab.onclick = () => {
                 this.currentFolder = folder.name;
                 this.currentPage = 1;
                 this.renderFolderTabs();
                 this.renderAssets();
             };
-            tab.ondragover = (e) => { e.preventDefault(); tab.style.background = "#2563eb"; };
-            tab.ondragleave = () => { tab.style.background = this.currentFolder === folder.name ? "#3b82f6" : "transparent"; };
+            tab.ondragover = (e) => { e.preventDefault(); tab.style.background = "linear-gradient(135deg, #2563eb, #1d4ed8)"; };
+            tab.ondragleave = () => { tab.style.background = this.currentFolder === folder.name ? "linear-gradient(135deg, #3b82f6, #2563eb)" : "transparent"; };
             tab.ondrop = (e) => this.handleDrop(e, folder.name);
 
-            // 删除按钮
-            const deleteBtn = document.createElement("span");
-            deleteBtn.className = "delete-folder-btn";
-            deleteBtn.textContent = "×";
-            deleteBtn.title = "删除文件夹";
-            deleteBtn.style.cssText = "color: #f87171; font-size: 16px; cursor: pointer; margin-left: 5px;";
-            deleteBtn.onclick = async (e) => {
-                e.stopPropagation();
-                if (confirm(`确定删除文件夹 "${folder.name}" 吗？\n注意：只能删除空文件夹`)) {
-                    await this.deleteFolder(folder.name);
-                }
+            // 右键菜单删除
+            tab.oncontextmenu = (e) => {
+                e.preventDefault();
+                this.showFolderContextMenu(e, folder.name);
             };
-            tab.appendChild(deleteBtn);
+
             container.appendChild(tab);
         });
 
         // 新建文件夹按钮
         const createBtn = document.createElement("div");
-        createBtn.innerHTML = "➕ 新建文件夹";
+        createBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px; vertical-align: middle;"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>新建文件夹`;
         createBtn.style.cssText = `
-            padding: 6px 10px;
+            padding: 8px 12px;
             margin: 8px 0 3px 0;
+            cursor: pointer;
+            border-radius: 6px;
+            font-size: 13px;
+            color: #10b981;
+            border: 1px dashed rgba(16, 185, 129, 0.5);
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+        `;
+        createBtn.onmouseenter = () => { createBtn.style.background = "rgba(16, 185, 129, 0.1)"; createBtn.style.borderColor = "#10b981"; };
+        createBtn.onmouseleave = () => { createBtn.style.background = "transparent"; createBtn.style.borderColor = "rgba(16, 185, 129, 0.5)"; };
+        createBtn.onclick = () => this.createFolder();
+        container.appendChild(createBtn);
+    }
+
+    // 显示文件夹右键菜单
+    showFolderContextMenu(e, folderName) {
+        // 移除已存在的菜单
+        const existingMenu = document.getElementById("folder-context-menu");
+        if (existingMenu) existingMenu.remove();
+
+        const menu = document.createElement("div");
+        menu.id = "folder-context-menu";
+        menu.style.cssText = `
+            position: fixed;
+            left: ${e.clientX}px;
+            top: ${e.clientY}px;
+            background: #2a2a2a;
+            border: 1px solid #444;
+            border-radius: 8px;
+            padding: 4px;
+            z-index: 10002;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            min-width: 120px;
+        `;
+
+        const deleteItem = document.createElement("div");
+        deleteItem.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2" style="margin-right: 8px; vertical-align: middle;"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>删除文件夹`;
+        deleteItem.style.cssText = `
+            padding: 8px 12px;
             cursor: pointer;
             border-radius: 4px;
             font-size: 13px;
-            color: #10b981;
-            border: 1px dashed #10b981;
+            color: #f87171;
+            display: flex;
+            align-items: center;
         `;
-        createBtn.onclick = () => this.createFolder();
-        container.appendChild(createBtn);
+        deleteItem.onmouseenter = () => { deleteItem.style.background = "rgba(248, 113, 113, 0.1)"; };
+        deleteItem.onmouseleave = () => { deleteItem.style.background = "transparent"; };
+        deleteItem.onclick = async () => {
+            menu.remove();
+            if (confirm(`确定删除文件夹 "${folderName}" 吗？\n注意：只能删除空文件夹`)) {
+                await this.deleteFolder(folderName);
+            }
+        };
+        menu.appendChild(deleteItem);
+
+        document.body.appendChild(menu);
+
+        // 点击其他地方关闭菜单
+        const closeMenu = (e) => {
+            if (!menu.contains(e.target)) {
+                menu.remove();
+                document.removeEventListener("click", closeMenu);
+            }
+        };
+        setTimeout(() => document.addEventListener("click", closeMenu), 0);
     }
 
     // 创建文件夹
