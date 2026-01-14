@@ -1,0 +1,14 @@
+[project]
+name = "comfyui-asset-library"
+description = "A powerful asset library plugin for ComfyUI - Manage images, videos, audio, and workflows with preview, folder organization, and drag-drop support"
+version = "1.0.0"
+license = { text = "MIT" }
+dependencies = []
+
+[project.urls]
+Repository = "https://github.com/yangying1205/ComfyUI-Asset-Library"
+
+[tool.comfy]
+PublisherId = "lj-wyd"
+DisplayName = "ComfyUI Asset Library"
+Icon = ""
