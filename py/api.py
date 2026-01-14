@@ -213,19 +213,37 @@ async def get_workflow_content(request):
 
 @PromptServer.instance.routes.get("/asset_library/workflow_folders")
 async def get_workflow_folders(request):
-    """获取工作流文件夹列表"""
+    """获取工作流文件夹列表 (兼容旧 API)"""
+    return await get_folders_by_type(request, "workflow")
+
+@PromptServer.instance.routes.get("/asset_library/folders")
+async def get_folders(request):
+    """获取指定资产类型的文件夹列表"""
+    asset_type = request.query.get("type", "workflow")
+    return await get_folders_by_type(request, asset_type)
+
+async def get_folders_by_type(request, asset_type):
+    """根据资产类型获取文件夹列表"""
     try:
-        workflows_dir = asset_manager.get_workflows_directory()
-        folders = []
+        base_dir = get_base_dir_for_type(asset_type)
+        if not base_dir or not os.path.exists(base_dir):
+            return web.json_response({"folders": []})
         
-        for item in os.listdir(workflows_dir):
-            item_path = os.path.join(workflows_dir, item)
+        folders = []
+        extensions = get_extensions_for_type(asset_type)
+        
+        for item in os.listdir(base_dir):
+            item_path = os.path.join(base_dir, item)
             if os.path.isdir(item_path):
-                # 统计文件夹中的工作流数量
-                workflow_count = len([f for f in os.listdir(item_path) if f.endswith('.json')])
+                # 统计文件夹中的文件数量
+                count = 0
+                for f in os.listdir(item_path):
+                    ext = os.path.splitext(f)[1].lower()
+                    if ext in extensions:
+                        count += 1
                 folders.append({
                     "name": item,
-                    "count": workflow_count
+                    "count": count
                 })
         
         folders.sort(key=lambda x: x["name"])
@@ -234,12 +252,33 @@ async def get_workflow_folders(request):
         print(f"[AssetLibrary] Error getting folders: {e}")
         return web.json_response({"error": str(e)}, status=500)
 
+def get_base_dir_for_type(asset_type):
+    """根据资产类型获取基础目录"""
+    if asset_type == "workflow":
+        return asset_manager.get_workflows_directory()
+    elif asset_type in ["image", "video", "audio"]:
+        return folder_paths.get_output_directory()
+    return None
+
+def get_extensions_for_type(asset_type):
+    """根据资产类型获取文件扩展名列表"""
+    if asset_type == "workflow":
+        return ['.json']
+    elif asset_type == "image":
+        return ['.png', '.jpg', '.jpeg', '.webp', '.bmp', '.gif']
+    elif asset_type == "video":
+        return ['.mp4', '.mov', '.avi', '.webm', '.mkv']
+    elif asset_type == "audio":
+        return ['.mp3', '.wav', '.flac', '.ogg', '.m4a']
+    return []
+
 @PromptServer.instance.routes.post("/asset_library/create_folder")
 async def create_folder(request):
-    """创建工作流文件夹"""
+    """创建文件夹"""
     try:
         data = await request.json()
         folder_name = data.get("name", "").strip()
+        asset_type = data.get("type", "workflow")
         
         if not folder_name:
             return web.json_response({"error": "文件夹名称不能为空"}, status=400)
@@ -249,8 +288,11 @@ async def create_folder(request):
         if any(c in folder_name for c in invalid_chars):
             return web.json_response({"error": "文件夹名称包含非法字符"}, status=400)
         
-        workflows_dir = asset_manager.get_workflows_directory()
-        folder_path = os.path.join(workflows_dir, folder_name)
+        base_dir = get_base_dir_for_type(asset_type)
+        if not base_dir:
+            return web.json_response({"error": "无效的资产类型"}, status=400)
+        
+        folder_path = os.path.join(base_dir, folder_name)
         
         if os.path.exists(folder_path):
             return web.json_response({"error": "文件夹已存在"}, status=400)
@@ -263,16 +305,20 @@ async def create_folder(request):
 
 @PromptServer.instance.routes.post("/asset_library/delete_folder")
 async def delete_folder(request):
-    """删除工作流文件夹（仅删除空文件夹）"""
+    """删除文件夹（仅删除空文件夹）"""
     try:
         data = await request.json()
         folder_name = data.get("name", "").strip()
+        asset_type = data.get("type", "workflow")
         
         if not folder_name:
             return web.json_response({"error": "文件夹名称不能为空"}, status=400)
         
-        workflows_dir = asset_manager.get_workflows_directory()
-        folder_path = os.path.join(workflows_dir, folder_name)
+        base_dir = get_base_dir_for_type(asset_type)
+        if not base_dir:
+            return web.json_response({"error": "无效的资产类型"}, status=400)
+        
+        folder_path = os.path.join(base_dir, folder_name)
         
         if not os.path.exists(folder_path):
             return web.json_response({"error": "文件夹不存在"}, status=404)
@@ -282,7 +328,7 @@ async def delete_folder(request):
         
         # 检查文件夹是否为空
         if os.listdir(folder_path):
-            return web.json_response({"error": "文件夹不为空，请先移动或删除其中的工作流"}, status=400)
+            return web.json_response({"error": "文件夹不为空，请先移动或删除其中的文件"}, status=400)
         
         os.rmdir(folder_path)
         return web.json_response({"success": True})
@@ -292,24 +338,38 @@ async def delete_folder(request):
 
 @PromptServer.instance.routes.post("/asset_library/move_workflow")
 async def move_workflow(request):
-    """移动工作流到指定文件夹"""
+    """移动工作流到指定文件夹 (兼容旧 API)"""
+    data = await request.json()
+    data["type"] = "workflow"
+    return await move_asset_impl(data)
+
+@PromptServer.instance.routes.post("/asset_library/move_asset")
+async def move_asset(request):
+    """移动资产到指定文件夹"""
+    data = await request.json()
+    return await move_asset_impl(data)
+
+async def move_asset_impl(data):
+    """移动资产的实现"""
     try:
-        data = await request.json()
         filename = data.get("filename", "")
         source_folder = data.get("source_folder", "")
-        target_folder = data.get("target_folder", "")  # 空字符串表示根目录
+        target_folder = data.get("target_folder", "")
+        asset_type = data.get("type", "workflow")
         
         if not filename:
             return web.json_response({"error": "文件名不能为空"}, status=400)
         
-        workflows_dir = asset_manager.get_workflows_directory()
+        base_dir = get_base_dir_for_type(asset_type)
+        if not base_dir:
+            return web.json_response({"error": "无效的资产类型"}, status=400)
         
         # 构建源路径和目标路径
-        source_path = os.path.join(workflows_dir, source_folder, filename) if source_folder else os.path.join(workflows_dir, filename)
-        target_path = os.path.join(workflows_dir, target_folder, filename) if target_folder else os.path.join(workflows_dir, filename)
+        source_path = os.path.join(base_dir, source_folder, filename) if source_folder else os.path.join(base_dir, filename)
+        target_path = os.path.join(base_dir, target_folder, filename) if target_folder else os.path.join(base_dir, filename)
         
         if not os.path.exists(source_path):
-            return web.json_response({"error": "工作流文件不存在"}, status=404)
+            return web.json_response({"error": "文件不存在"}, status=404)
         
         if source_path == target_path:
             return web.json_response({"success": True, "message": "无需移动"})
@@ -328,5 +388,6 @@ async def move_workflow(request):
         
         return web.json_response({"success": True, "new_subfolder": target_folder})
     except Exception as e:
-        print(f"[AssetLibrary] Error moving workflow: {e}")
+        print(f"[AssetLibrary] Error moving asset: {e}")
         return web.json_response({"error": str(e)}, status=500)
+

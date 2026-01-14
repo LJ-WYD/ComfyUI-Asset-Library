@@ -57,10 +57,13 @@ class AssetLibrary {
         this.sidebar.innerHTML = `
             <div class="comfy-asset-library-filter active" data-filter="all">All (全部)</div>
             <div class="comfy-asset-library-filter" data-filter="image">Images (图片)</div>
+            <div id="image-folders-container" class="asset-folders-container" style="display: none; margin-left: 15px; border-left: 2px solid #444; padding-left: 8px;"></div>
             <div class="comfy-asset-library-filter" data-filter="video">Videos (视频)</div>
+            <div id="video-folders-container" class="asset-folders-container" style="display: none; margin-left: 15px; border-left: 2px solid #444; padding-left: 8px;"></div>
             <div class="comfy-asset-library-filter" data-filter="audio">Audio (音频)</div>
+            <div id="audio-folders-container" class="asset-folders-container" style="display: none; margin-left: 15px; border-left: 2px solid #444; padding-left: 8px;"></div>
             <div class="comfy-asset-library-filter" data-filter="workflow">Workflows (工作流)</div>
-            <div id="workflow-folders-container" style="display: none; margin-left: 15px; border-left: 2px solid #444; padding-left: 8px;"></div>
+            <div id="workflow-folders-container" class="asset-folders-container" style="display: none; margin-left: 15px; border-left: 2px solid #444; padding-left: 8px;"></div>
         `;
         this.sidebar.querySelectorAll(".comfy-asset-library-filter").forEach(el => {
             el.onclick = (e) => {
@@ -70,13 +73,17 @@ class AssetLibrary {
                 this.currentFolder = "";
                 this.currentPage = 1;
 
-                // 当选择 workflow 时显示文件夹标签
-                const foldersContainer = document.getElementById("workflow-folders-container");
-                if (this.filter === "workflow") {
-                    foldersContainer.style.display = "block";
-                    this.loadWorkflowFolders();
-                } else {
-                    foldersContainer.style.display = "none";
+                // 隐藏所有文件夹容器
+                this.sidebar.querySelectorAll(".asset-folders-container").forEach(c => c.style.display = "none");
+
+                // 显示当前类型的文件夹容器（除了 "all"）
+                const supportsFolders = ["image", "video", "audio", "workflow"];
+                if (supportsFolders.includes(this.filter)) {
+                    const container = document.getElementById(`${this.filter}-folders-container`);
+                    if (container) {
+                        container.style.display = "block";
+                        this.loadFolders(this.filter);
+                    }
                 }
 
                 this.renderAssets();
@@ -92,27 +99,30 @@ class AssetLibrary {
         document.body.appendChild(this.modal);
     }
 
-    // 加载工作流文件夹列表
-    async loadWorkflowFolders() {
-        const container = document.getElementById("workflow-folders-container");
+    // 加载指定类型的文件夹列表
+    async loadFolders(assetType) {
+        const container = document.getElementById(`${assetType}-folders-container`);
         if (!container) return;
 
         try {
-            const response = await api.fetchApi("/asset_library/workflow_folders");
+            const response = await api.fetchApi(`/asset_library/folders?type=${assetType}`);
             const data = await response.json();
-            this.workflowFolders = data.folders || [];
-            this.renderFolderTabs();
+            this.assetFolders = this.assetFolders || {};
+            this.assetFolders[assetType] = data.folders || [];
+            this.renderFolderTabs(assetType);
         } catch (e) {
             console.error("[AssetLibrary] Error loading folders:", e);
         }
     }
 
     // 渲染文件夹标签
-    renderFolderTabs() {
-        const container = document.getElementById("workflow-folders-container");
+    renderFolderTabs(assetType = this.filter) {
+        const container = document.getElementById(`${assetType}-folders-container`);
         if (!container) return;
 
         container.innerHTML = "";
+
+        const folders = (this.assetFolders && this.assetFolders[assetType]) || [];
 
         // 现代风格的文件夹图标 SVG
         const folderIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; vertical-align: middle;"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>`;
@@ -120,7 +130,7 @@ class AssetLibrary {
 
         // "全部" 子标签
         const allTab = document.createElement("div");
-        allTab.className = "workflow-folder-tab" + (this.currentFolder === "" ? " active" : "");
+        allTab.className = "asset-folder-tab" + (this.currentFolder === "" ? " active" : "");
         allTab.innerHTML = `${listIcon}全部`;
         allTab.style.cssText = `
             padding: 8px 12px;
@@ -139,18 +149,18 @@ class AssetLibrary {
         allTab.onclick = () => {
             this.currentFolder = "";
             this.currentPage = 1;
-            this.renderFolderTabs();
+            this.renderFolderTabs(assetType);
             this.renderAssets();
         };
         allTab.ondragover = (e) => { e.preventDefault(); allTab.style.background = "linear-gradient(135deg, #2563eb, #1d4ed8)"; };
         allTab.ondragleave = () => { allTab.style.background = this.currentFolder === "" ? "linear-gradient(135deg, #3b82f6, #2563eb)" : "transparent"; };
-        allTab.ondrop = (e) => this.handleDrop(e, "");
+        allTab.ondrop = (e) => this.handleDrop(e, "", assetType);
         container.appendChild(allTab);
 
         // 文件夹标签
-        this.workflowFolders.forEach(folder => {
+        folders.forEach(folder => {
             const tab = document.createElement("div");
-            tab.className = "workflow-folder-tab" + (this.currentFolder === folder.name ? " active" : "");
+            tab.className = "asset-folder-tab" + (this.currentFolder === folder.name ? " active" : "");
             tab.innerHTML = `${folderIcon}${folder.name} <span style="color:#666; font-size:11px; margin-left:auto;">${folder.count}</span>`;
             tab.style.cssText = `
                 padding: 8px 12px;
@@ -169,17 +179,17 @@ class AssetLibrary {
             tab.onclick = () => {
                 this.currentFolder = folder.name;
                 this.currentPage = 1;
-                this.renderFolderTabs();
+                this.renderFolderTabs(assetType);
                 this.renderAssets();
             };
             tab.ondragover = (e) => { e.preventDefault(); tab.style.background = "linear-gradient(135deg, #2563eb, #1d4ed8)"; };
             tab.ondragleave = () => { tab.style.background = this.currentFolder === folder.name ? "linear-gradient(135deg, #3b82f6, #2563eb)" : "transparent"; };
-            tab.ondrop = (e) => this.handleDrop(e, folder.name);
+            tab.ondrop = (e) => this.handleDrop(e, folder.name, assetType);
 
             // 右键菜单删除
             tab.oncontextmenu = (e) => {
                 e.preventDefault();
-                this.showFolderContextMenu(e, folder.name);
+                this.showFolderContextMenu(e, folder.name, assetType);
             };
 
             container.appendChild(tab);
@@ -202,12 +212,12 @@ class AssetLibrary {
         `;
         createBtn.onmouseenter = () => { createBtn.style.background = "rgba(16, 185, 129, 0.1)"; createBtn.style.borderColor = "#10b981"; };
         createBtn.onmouseleave = () => { createBtn.style.background = "transparent"; createBtn.style.borderColor = "rgba(16, 185, 129, 0.5)"; };
-        createBtn.onclick = () => this.createFolder();
+        createBtn.onclick = () => this.createFolder(assetType);
         container.appendChild(createBtn);
     }
 
     // 显示文件夹右键菜单
-    showFolderContextMenu(e, folderName) {
+    showFolderContextMenu(e, folderName, assetType = this.filter) {
         // 移除已存在的菜单
         const existingMenu = document.getElementById("folder-context-menu");
         if (existingMenu) existingMenu.remove();
@@ -243,7 +253,7 @@ class AssetLibrary {
         deleteItem.onclick = async () => {
             menu.remove();
             if (confirm(`确定删除文件夹 "${folderName}" 吗？\n注意：只能删除空文件夹`)) {
-                await this.deleteFolder(folderName);
+                await this.deleteFolder(folderName, assetType);
             }
         };
         menu.appendChild(deleteItem);
@@ -261,7 +271,7 @@ class AssetLibrary {
     }
 
     // 创建文件夹
-    async createFolder() {
+    async createFolder(assetType = this.filter) {
         const name = prompt("请输入文件夹名称:");
         if (!name || !name.trim()) return;
 
@@ -269,11 +279,11 @@ class AssetLibrary {
             const response = await api.fetchApi("/asset_library/create_folder", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name: name.trim() })
+                body: JSON.stringify({ name: name.trim(), type: assetType })
             });
             const data = await response.json();
             if (data.success) {
-                await this.loadWorkflowFolders();
+                await this.loadFolders(assetType);
             } else {
                 alert(data.error || "创建失败");
             }
@@ -284,19 +294,19 @@ class AssetLibrary {
     }
 
     // 删除文件夹
-    async deleteFolder(name) {
+    async deleteFolder(name, assetType = this.filter) {
         try {
             const response = await api.fetchApi("/asset_library/delete_folder", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name })
+                body: JSON.stringify({ name, type: assetType })
             });
             const data = await response.json();
             if (data.success) {
                 if (this.currentFolder === name) {
                     this.currentFolder = "";
                 }
-                await this.loadWorkflowFolders();
+                await this.loadFolders(assetType);
                 this.renderAssets();
             } else {
                 alert(data.error || "删除失败");
@@ -308,27 +318,29 @@ class AssetLibrary {
     }
 
     // 处理拖放
-    async handleDrop(e, targetFolder) {
+    async handleDrop(e, targetFolder, assetType = this.filter) {
         e.preventDefault();
         const data = e.dataTransfer.getData("application/json");
         if (!data) return;
 
         try {
             const asset = JSON.parse(data);
-            if (asset.category !== "workflow") return;
+            // 检查资产类型是否匹配当前筛选器
+            if (asset.category !== assetType) return;
 
-            const response = await api.fetchApi("/asset_library/move_workflow", {
+            const response = await api.fetchApi("/asset_library/move_asset", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     filename: asset.filename,
                     source_folder: asset.subfolder || "",
-                    target_folder: targetFolder
+                    target_folder: targetFolder,
+                    type: assetType
                 })
             });
             const result = await response.json();
             if (result.success) {
-                await this.loadWorkflowFolders();
+                await this.loadFolders(assetType);
                 await this.fetchAssets();
             } else {
                 alert(result.error || "移动失败");
@@ -356,9 +368,9 @@ class AssetLibrary {
         this.content.innerHTML = "";
         let filtered = this.assets.filter(a => this.filter === "all" || a.category === this.filter);
 
-        // 工作流文件夹筛选 (根据侧边栏选择的文件夹)
-        if (this.filter === "workflow" && this.currentFolder !== "") {
-            // 只显示当前文件夹的工作流
+        // 文件夹筛选 (根据侧边栏选择的文件夹) - 适用于所有支持文件夹的类型
+        const supportsFolders = ["image", "video", "audio", "workflow"];
+        if (supportsFolders.includes(this.filter) && this.currentFolder !== "") {
             filtered = filtered.filter(a => (a.subfolder || "") === this.currentFolder);
         }
 
@@ -385,8 +397,9 @@ class AssetLibrary {
             el.className = "comfy-asset-item";
             el.style.cssText = "border: 1px solid #444; border-radius: 8px; overflow: hidden; background: #1a1a1a; display: flex; flex-direction: column; cursor: pointer; min-height: 200px; position: relative;";
 
-            // 工作流可拖拽
-            if (asset.category === "workflow") {
+            // 支持文件夹的类型可拖拽
+            const dragTypes = ["image", "video", "audio", "workflow"];
+            if (dragTypes.includes(asset.category)) {
                 el.draggable = true;
                 el.ondragstart = (e) => {
                     e.dataTransfer.setData("application/json", JSON.stringify(asset));
